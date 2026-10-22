@@ -14,6 +14,7 @@ pipeline {
             choices: ['STABLE', 'FAULTY_ROLLBACK_TEST'],
             description: 'Choose stable deployment or test automatic rollback.'
         )
+
         booleanParam(
             name: 'DEPLOY_TO_KUBERNETES',
             defaultValue: true,
@@ -97,7 +98,7 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'dockerhub-creds',
+                        credentialsId: "${DOCKER_CREDENTIALS_ID}",
                         usernameVariable: 'DH_USER',
                         passwordVariable: 'DH_TOKEN'
                     )
@@ -112,7 +113,7 @@ pipeline {
                         )
 
                         if (loginStatus != 0) {
-                            error('Docker Hub login failed. Check the credential type, username, token permissions, and token value.')
+                            error('Docker Hub login failed. Check the credential ID and token.')
                         }
 
                         try {
@@ -136,7 +137,7 @@ pipeline {
                 script {
                     withCredentials([
                         file(
-                            credentialsId: 'kubernetes-creds',
+                            credentialsId: "${KUBECONFIG_CREDENTIALS_ID}",
                             variable: 'KUBECONFIG'
                         )
                     ]) {
@@ -146,20 +147,62 @@ pipeline {
                         bat "kubectl set image deployment/e-waste-portal e-waste-portal=${env.DOCKERHUB_USERNAME}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
 
                         if (params.RELEASE_MODE == 'FAULTY_ROLLBACK_TEST') {
-                            echo 'Testing rollback using an invalid readiness probe.'
+                            echo 'Applying an intentionally faulty readiness probe.'
 
-                            bat '''
-                            kubectl patch deployment e-waste-portal --type=strategic -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"e-waste-portal\",\"readinessProbe\":{\"httpGet\":{\"path\":\"/faulty-health-check\",\"port\":\"http\"},\"initialDelaySeconds\":1,\"periodSeconds\":3,\"timeoutSeconds\":1,\"failureThreshold\":2}}]}}}}"
-                            '''
-                        }
+                            // Write JSON to a file to avoid Windows CMD quote escaping.
+                            writeFile(
+                                file: 'faulty-patch.json',
+                                text: '''{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "e-waste-portal",
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/faulty-health-check",
+                "port": "http"
+              },
+              "initialDelaySeconds": 1,
+              "periodSeconds": 3,
+              "timeoutSeconds": 1,
+              "failureThreshold": 2
+            }
+          }
+        ]
+      }
+    }
+  }
+}'''
+                            )
 
-                        int rolloutStatus = bat(
-                            returnStatus: true,
-                            script: 'kubectl rollout status deployment/e-waste-portal --timeout=90s'
-                        )
+                            bat 'kubectl patch deployment e-waste-portal --type=strategic --patch-file=faulty-patch.json'
 
-                        if (rolloutStatus != 0) {
-                            echo 'Deployment failed. Collecting diagnostics and attempting rollback.'
+                            int faultyRolloutStatus = bat(
+                                returnStatus: true,
+                                script: 'kubectl rollout status deployment/e-waste-portal --timeout=90s'
+                            )
+
+                            if (faultyRolloutStatus == 0) {
+                                echo 'The faulty deployment unexpectedly became ready.'
+
+                                // Restore the previous working revision.
+                                int undoStatus = bat(
+                                    returnStatus: true,
+                                    script: 'kubectl rollout undo deployment/e-waste-portal'
+                                )
+
+                                if (undoStatus != 0) {
+                                    error('Unexpectedly healthy test deployment; rollback command failed.')
+                                }
+
+                                bat 'kubectl rollout status deployment/e-waste-portal --timeout=120s'
+
+                                error('Rollback recovery succeeded, but the faulty rollout unexpectedly passed. Review the probe configuration.')
+                            }
+
+                            echo 'Faulty rollout failed as expected. Attempting automatic rollback.'
 
                             bat 'kubectl get pods -l app=e-waste-portal -o wide'
                             bat 'kubectl describe deployment e-waste-portal'
@@ -176,7 +219,7 @@ pipeline {
 
                             int recoveryStatus = bat(
                                 returnStatus: true,
-                                script: 'kubectl rollout status deployment/e-waste-portal --timeout=90s'
+                                script: 'kubectl rollout status deployment/e-waste-portal --timeout=120s'
                             )
 
                             if (recoveryStatus != 0) {
@@ -185,13 +228,42 @@ pipeline {
 
                             bat 'kubectl get deployment e-waste-portal'
                             bat 'kubectl get pods -l app=e-waste-portal'
+                            bat 'kubectl get service e-waste-portal'
 
-                            error('The rollout failed. Rollback was completed and recovery was checked.')
+                            echo 'Rollback test passed: the failed rollout was detected and the previous revision recovered.'
+                        } else {
+                            int rolloutStatus = bat(
+                                returnStatus: true,
+                                script: 'kubectl rollout status deployment/e-waste-portal --timeout=120s'
+                            )
+
+                            if (rolloutStatus != 0) {
+                                echo 'Stable deployment failed. Collecting diagnostics.'
+
+                                bat 'kubectl get pods -l app=e-waste-portal -o wide'
+                                bat 'kubectl describe deployment e-waste-portal'
+                                bat 'kubectl rollout history deployment/e-waste-portal'
+
+                                int undoStatus = bat(
+                                    returnStatus: true,
+                                    script: 'kubectl rollout undo deployment/e-waste-portal'
+                                )
+
+                                if (undoStatus != 0) {
+                                    error('Deployment failed and rollback could not be initiated.')
+                                }
+
+                                bat 'kubectl rollout status deployment/e-waste-portal --timeout=120s'
+
+                                error('Stable deployment failed. Previous revision was restored.')
+                            }
+
+                            bat 'kubectl get deployment e-waste-portal'
+                            bat 'kubectl get pods -l app=e-waste-portal'
+                            bat 'kubectl get service e-waste-portal'
+
+                            echo 'Stable deployment completed successfully.'
                         }
-
-                        bat 'kubectl get deployment e-waste-portal'
-                        bat 'kubectl get pods -l app=e-waste-portal'
-                        bat 'kubectl get service e-waste-portal'
                     }
                 }
             }
