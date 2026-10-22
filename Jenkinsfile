@@ -15,8 +15,8 @@ pipeline {
     environment {
         DOCKERHUB_USERNAME = 'archanajawahar14'
         IMAGE_NAME = 'e-waste-portal'
-        DOCKER_CREDENTIALS_ID = 'dockerhub-userpass'
-        KUBECONFIG_CREDENTIALS_ID = 'kubernetes-config'
+        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
+        KUBECONFIG_CREDENTIALS_ID = 'kubernetes-creds'
     }
 
     stages {
