@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City E-Waste Collection & Recycling Portal</title>
+<style>
+:root{--green:#176b4d;--light:#eaf5ef;--ink:#182b25;--muted:#60736b;--line:#dce7e1;--amber:#fff0cf;--blue:#e6f0ff}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f5f8f6;color:var(--ink)}
+header{background:linear-gradient(120deg,#104b38,#20815c);color:white;padding:28px max(20px,calc((100% - 1180px)/2))}
+header h1{margin:0 0 8px;font-size:clamp(1.6rem,3vw,2.35rem)}header p{margin:0;max-width:800px;line-height:1.5;color:#e3f4eb}
+main{max-width:1180px;margin:24px auto;padding:0 18px}.notice{background:#fff;border:1px solid var(--line);padding:12px 16px;border-radius:10px;color:var(--muted);margin-bottom:18px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:24px}.stat,.panel,.centre{background:white;border:1px solid var(--line);border-radius:13px;padding:17px;box-shadow:0 2px 8px #1233}
+.stat span{display:block;color:var(--muted);font-size:.9rem}.stat strong{display:block;font-size:2rem;margin-top:8px;color:var(--green)}
+.section-head{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:22px 0 12px}.section-head h2{margin:0;font-size:1.35rem}
+input,select,textarea,button{font:inherit;padding:10px 12px;border-radius:8px;border:1px solid #bdcec4;background:white;color:var(--ink)}
+input,select{max-width:100%}button{background:var(--green);color:white;border-color:var(--green);font-weight:700;cursor:pointer}button:hover{filter:brightness(.92)}
+.centres{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.centre h3{margin:0 0 7px}.location{color:var(--muted);margin:0 0 12px}.centre p{line-height:1.45;margin:8px 0}.label{font-weight:700}.pill{display:inline-block;border-radius:999px;padding:5px 9px;font-size:.8rem;font-weight:700}.collected{background:#dff5e7;color:#17623f}.awaiting{background:var(--amber);color:#855700}.recycling{background:var(--blue);color:#174f91}.recycled{background:#e8e4ff;color:#493a9b}
+.panel{margin-top:22px}.panel p{color:var(--muted);line-height:1.5}.schedule-list{padding-left:20px;line-height:1.8}.admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.admin-form label{display:flex;flex-direction:column;gap:5px;font-size:.9rem;font-weight:700}.admin-form .full{grid-column:1/-1}.feedback{min-height:1.4em;color:var(--green);font-weight:700}
+footer{text-align:center;color:var(--muted);padding:28px 15px;font-size:.9rem}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.centres{grid-template-columns:1fr}.admin-form{grid-template-columns:1fr}.admin-form .full{grid-column:auto}}
+</style>
+</head>
+<body>
+<header>
+  <h1>E-Waste Collection & Recycling Portal</h1>
+  <p>Find a collection centre, check accepted electronics, follow recycling progress, and review collection schedule updates.</p>
+</header>
+<main>
+  <div class="notice"><strong>Demonstration portal:</strong> all centre records, schedules and processing counts below are sample data for a DevOps project. Confirm real disposal arrangements with your local authority.</div>
+  <section aria-label="Processing summary" class="stats" id="stats">
+    <div class="stat"><span>Items collected</span><strong id="collectedCount">128</strong></div>
+    <div class="stat"><span>Awaiting processing</span><strong id="awaitingCount">24</strong></div>
+    <div class="stat"><span>Under recycling</span><strong id="recyclingCount">37</strong></div>
+    <div class="stat"><span>Successfully recycled</span><strong id="recycledCount">67</strong></div>
+  </section>
+  <div class="section-head"><h2>Collection centres</h2><input id="search" type="search" placeholder="Search centre or device category" aria-label="Search centres"></div>
+  <section class="centres" id="centreList" aria-live="polite"></section>
+  <section class="panel">
+    <div class="section-head"><h2>Latest collection schedule updates</h2></div>
+    <p>Administrators can publish a revised schedule using the form below. Updates are shown in this browser session for demonstration; they are not stored on a server.</p>
+    <ul class="schedule-list" id="scheduleList">
+      <li><strong>Central Civic Centre:</strong> Saturday, 9:00 AM–2:00 PM — revised hours for this week.</li>
+      <li><strong>North Zone Resource Hub:</strong> Wednesday, 10:00 AM–4:00 PM — batteries accepted at the secure desk.</li>
+    </ul>
+  </section>
+  <section class="panel" id="admin">
+    <h2>Administrator: publish collection update</h2>
+    <form id="scheduleForm" class="admin-form">
+      <label>Collection centre<input name="centre" required maxlength="80" placeholder="e.g. Central Civic Centre"></label>
+      <label>Revised schedule<input name="schedule" required maxlength="120" placeholder="e.g. Saturday, 9 AM–2 PM"></label>
+      <label class="full">Public notice<input name="notice" required maxlength="180" placeholder="What should residents know?"></label>
+      <div class="full"><button type="submit">Publish update</button></div>
+    </form>
+    <p id="feedback" class="feedback" role="status"></p>
+  </section>
+</main>
+<footer>City E-Waste Portal · Sample records for demonstration · Handle batteries and damaged electronics safely.</footer>
+<script>
+const centres = [
+ {name:"Central Civic Collection Centre",location:"Civic Hall, Central District",devices:"Mobile phones, laptops, batteries, televisions",schedule:"Saturday, 9:00 AM–2:00 PM",instructions:"Keep batteries separate; do not dismantle devices. Remove personal data before handing over.",status:"Collected"},
+ {name:"North Zone Resource Hub",location:"Community Park Road, North Zone",devices:"Laptops, desktops, mobile phones, chargers",schedule:"Wednesday, 10:00 AM–4:00 PM",instructions:"Bundle cables separately and protect screens from breakage.",status:"Awaiting processing"},
+ {name:"Eastside Recycling Point",location:"Market Street, East Ward",devices:"Batteries, televisions, monitors, small appliances",schedule:"Monday and Friday, 8:30 AM–1:00 PM",instructions:"Tape battery terminals where appropriate; never place batteries in general waste.",status:"Under recycling"},
+ {name:"South Community Drop-off",location:"South Transport Depot, South Ward",devices:"Mobile phones, tablets, laptops, cameras",schedule:"Tuesday, 11:00 AM–5:00 PM",instructions:"Back up and erase personal data; include accessories in a separate bag.",status:"Successfully recycled"},
+ {name:"West District Eco Centre",location:"Industrial Estate Gate 2, West Ward",devices:"Televisions, printers, batteries, computers",schedule:"Thursday, 9:00 AM–3:00 PM",instructions:"Keep large screens upright and notify staff about swollen or damaged batteries.",status:"Awaiting processing"}
+];
+const statusClass = {"Collected":"collected","Awaiting processing":"awaiting","Under recycling":"recycling","Successfully recycled":"recycled"};
+function renderCentres(filter=""){
+ const list=document.getElementById("centreList"); list.innerHTML="";
+ const matches=centres.filter(c=>(c.name+" "+c.location+" "+c.devices).toLowerCase().includes(filter.toLowerCase()));
+ matches.forEach(c=>{const article=document.createElement("article");article.className="centre";
+  const h=document.createElement("h3");h.textContent=c.name;article.appendChild(h);
+  const loc=document.createElement("p");loc.className="location";loc.textContent=c.location;article.appendChild(loc);
+  [["Accepted devices",c.devices],["Collection schedule",c.schedule],["Recycling instructions",c.instructions]].forEach(([label,value])=>{const p=document.createElement("p");const b=document.createElement("span");b.className="label";b.textContent=label+": ";p.append(b,document.createTextNode(value));article.appendChild(p)});
+  const status=document.createElement("span");status.className="pill "+statusClass[c.status];status.textContent=c.status;article.appendChild(status);list.appendChild(article);
+ });
+ if(!matches.length) list.textContent="No matching collection centres. Try another search.";
+}
+document.getElementById("search").addEventListener("input",e=>renderCentres(e.target.value));
+document.getElementById("scheduleForm").addEventListener("submit",e=>{
+ e.preventDefault();const data=new FormData(e.target);const li=document.createElement("li");const strong=document.createElement("strong");
+ strong.textContent=data.get("centre")+": ";li.append(strong,document.createTextNode(data.get("schedule")+" — "+data.get("notice")));
+ document.getElementById("scheduleList").prepend(li);document.getElementById("feedback").textContent="Collection update published in this browser session.";e.target.reset();
+});
+renderCentres();
+</script>
+</body>
+</html>
